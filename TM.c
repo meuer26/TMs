@@ -1,3 +1,5 @@
+// Not a universal TM. We need at least 10 states with two symbols.
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
