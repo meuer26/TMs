@@ -7,7 +7,7 @@
 #define TAPE_LENGTH 1000
 #define MAX_STEPS 100
 #define DISPLAY_SIZE 25
-#define NUM_SYMBOLS 3 // Symbols: 0, 1, 2 (2 for halt marker)
+#define NUM_SYMBOLS 10 
 #define MAX_ITERATIONS 3 // Halt after 3 segments
 
 typedef struct {
