@@ -1,3 +1,3 @@
-# A Combination of Classical and Hypercomputation Turing Machines
+# A Combination of Classical and Hypercomputational Turing Machines
 
 Dan O’Malley
