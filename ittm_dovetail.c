@@ -1,3 +1,5 @@
+// ITTM with variable 3 state TMs and dovetailing
+
 #include <stdio.h>
 #include <stdint.h>
 #include <string.h>

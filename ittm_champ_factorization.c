@@ -1,3 +1,6 @@
+// ITTM with Champernowne prime factorization
+
+
 #include <stdio.h>    // For printf, fprintf: output functions
 #include <stdlib.h>   // For atoi, exit: string to number, program exit
 #include <stdint.h>   // For uint8_t, uint32_t: fixed-width integers
