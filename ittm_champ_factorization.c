@@ -1,6 +1,5 @@
 // ITTM with Champernowne prime factorization
 
-
 #include <stdio.h>    // For printf, fprintf: output functions
 #include <stdlib.h>   // For atoi, exit: string to number, program exit
 #include <stdint.h>   // For uint8_t, uint32_t: fixed-width integers
@@ -76,6 +75,8 @@ void assign_rules() {
     uint8_t halt_prone[STATES][SYMBOLS] = {{1, 1}, {2, 2}, {0, 0}}; // [0->1,1] [1->2,2] [2->0,0]
     uint8_t cycle_prone[STATES][SYMBOLS] = {{1, 1}, {0, 0}, {0, 0}}; // [0->1,1] [1->0,0] [2->0,0]
     uint8_t mixed[STATES][SYMBOLS] = {{1, 1}, {2, 0}, {0, 0}};      // [0->1,1] [1->2,0] [2->0,0]
+    // Print header for alignment
+    printf("%-8s %-6s %-25s %s\n", "Machine", "Number", "Factorization", "Rules");
     // Assign rules for each of 32 machines using prime factorization
     for (int i = 0; i < MACHINES; i++) {
         machines[i].state = 0; // Initialize state to 0 (running)
@@ -135,7 +136,7 @@ void assign_rules() {
             }
         }
         // Print number, full factorization, and actual rules for debugging
-        printf("Machine %d: Number=%d, Factorization=%s, Rules=[0->%d,%d] [1->%d,%d] [2->%d,%d]\n",
+        printf("%-8d %-6d %-25s [0->%d,%d] [1->%d,%d] [2->%d,%d]\n",
                i, num, factor_str,
                rules[i][0][0], rules[i][0][1],
                rules[i][1][0], rules[i][1][1],
@@ -218,14 +219,14 @@ void print_halt_map() {
     // Print total halts
     printf("\nHalted: %d/%d\n", halts, MACHINES);
     // Debug: show termination steps for first 5 machines
-    printf("Termination steps for first 5 machines:\n");
-    for (int m = 0; m < 5 && m < MACHINES; m++) {
+    printf("Termination steps for all machines:\n");
+    for (int m = 0; m < MACHINES; m++) {
         if (machines[m].done && (halt_map[m / 8] & (1 << (m % 8)))) {
-            printf("Machine %d halted at step %u\n", m, machines[m].halt_step);
+            printf("- Machine %d halted at step %u\n", m, machines[m].halt_step);
         } else if (machines[m].done) {
-            printf("Machine %d looped at step %u\n", m, machines[m].halt_step);
+            printf("- Machine %d looped at step %u\n", m, machines[m].halt_step);
         } else {
-            printf("Machine %d still running at step %u\n", m, STEPS);
+            printf("- Machine %d still running at step %u\n", m, STEPS);
         }
     }
 }
