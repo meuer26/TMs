@@ -7,6 +7,7 @@
 #define NUM_STATES 3
 #define NUM_SYMBOLS 2
 #define MAX_STEPS 500
+#define MAX_PERSONAL_STEPS 100
 #define WINDOW_SIZE 20
 #define TAPE_LENGTH 1000
 
@@ -88,6 +89,30 @@ void setup_rules(int num_machines) {
         // Machine 19: Loop (write 0, cycle 0↔1)
         {{{0,1},{0,0}}, {{1,0},{1,1}}, {{0,0},{0,0}}}
     };
+
+    const char* descriptions[20] = {
+        "Loop (stay in state 0)",
+        "Halt after two steps",
+        "Loop (cycle 0<->1)",
+        "Loop (write 1, stay 1)",
+        "Halt after two steps",
+        "Halt immediately",
+        "Loop (write 0, stay 1)",
+        "Halt after two steps",
+        "Halt immediately",
+        "Halt after three steps",
+        "Loop (write 1, cycle 0<->1)",
+        "Halt immediately",
+        "Halt after two steps",
+        "Halt immediately",
+        "Loop (stay in state 0)",
+        "Loop (stay in state 0)",
+        "Loop (write 0, cycle 0<->1)",
+        "Halt immediately",
+        "Loop (write 0, cycle 0<->1)",
+        "Loop (write 0, cycle 0<->1)"
+    };
+
     // Initialize machines and copy rules
     for (int i = 0; i < num_machines; i++) {
         int pat = i % 20;
@@ -101,10 +126,11 @@ void setup_rules(int num_machines) {
                 rule_table[i][s][sym] = templates[pat][s][sym];
             }
         }
-        printf("Machine %d: Rules=[0->%d,%d] [1->%d,%d] [0->%d,%d]\n",
+        printf("Machine %d: Rules=[0->%d,%d] [1->%d,%d] [0->%d,%d] %s\n",
                i, rule_table[i][0][0].write_symbol, rule_table[i][0][0].next_state,
                rule_table[i][0][1].write_symbol, rule_table[i][0][1].next_state,
-               rule_table[i][1][0].write_symbol, rule_table[i][1][0].next_state);
+               rule_table[i][1][0].write_symbol, rule_table[i][1][0].next_state,
+               descriptions[pat]);
     }
     memset(halt_set, 0, sizeof(halt_set));
     printf("Rule generation completed for all machines.\n");
@@ -118,7 +144,7 @@ int detect_loop(int machine_idx, uint32_t step) {
     past_states[machine_idx][(step - 1) % WINDOW_SIZE] = tms[machine_idx].current_state;
     state_steps[machine_idx][(step - 1) % WINDOW_SIZE] = step;
 
-    if (step < 100) return 0; // Threshold for loop detection
+    if (step < MAX_PERSONAL_STEPS) return 0; // Threshold for loop detection
     // Check Tape 3 periodicity
     for (int period = 1; period <= WINDOW_SIZE / 2; period++) {
         int is_loop = 1;
@@ -203,7 +229,7 @@ void simulate(int num_machines) {
             tms[m].current_state = next;
             tms[m].tape_position++;
             tms[m].halt_step = personal_step;
-            if (next == 2 || (personal_step >= 100 && detect_loop(m, personal_step))) {
+            if (next == 2 || (personal_step >= MAX_PERSONAL_STEPS && detect_loop(m, personal_step))) {
                 tms[m].halted = 1;
                 if (next == 2) {
                     halt_set[m / 8] |= (1 << (m % 8));
