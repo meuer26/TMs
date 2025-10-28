@@ -7,7 +7,7 @@
 #define NUM_STATES 3
 #define NUM_SYMBOLS 2
 #define MAX_STEPS 500
-#define WINDOW_SIZE 12
+#define WINDOW_SIZE 20
 #define TAPE_LENGTH 1000
 
 // Structure for each Turing machine
@@ -15,7 +15,7 @@ typedef struct {
     uint8_t current_state;   // Current state (0, 1, or 2 for halt)
     uint32_t tape_position;  // Position on input tape
     uint8_t halted;          // 1 if halted or looped
-    uint32_t halt_step;      // Step at which machine halted or looped
+    uint32_t halt_step;      // Personal step count at which machine halted or looped
     uint8_t tape[TAPE_LENGTH]; // Individual input tape
 } TuringMachine;
 
@@ -109,6 +109,12 @@ void setup_rules() {
 
 // Check for loops in Tape 3 and state periodicity
 int detect_loop(int machine_idx, uint32_t step) {
+    // Update state buffer
+    static uint8_t past_states[NUM_MACHINES][WINDOW_SIZE];
+    static uint32_t state_steps[NUM_MACHINES][WINDOW_SIZE];
+    past_states[machine_idx][(step - 1) % WINDOW_SIZE] = tms[machine_idx].current_state;
+    state_steps[machine_idx][(step - 1) % WINDOW_SIZE] = step;
+
     if (step < 100) return 0; // Threshold for loop detection
     // Check Tape 3 periodicity
     for (int period = 1; period <= WINDOW_SIZE / 2; period++) {
@@ -124,91 +130,104 @@ int detect_loop(int machine_idx, uint32_t step) {
         if (is_loop) return 1;
     }
     // Check state periodicity
-    static uint8_t past_states[NUM_MACHINES][WINDOW_SIZE];
-    static uint32_t state_steps[NUM_MACHINES][WINDOW_SIZE];
-    if (step < WINDOW_SIZE) {
-        past_states[machine_idx][step % WINDOW_SIZE] = tms[machine_idx].current_state;
-        state_steps[machine_idx][step % WINDOW_SIZE] = step;
-    } else {
-        for (int period = 1; period <= WINDOW_SIZE / 2; period++) {
-            int is_loop = 1;
-            for (int i = 0; i < period; i++) {
-                int idx1 = (step - i - 1) % WINDOW_SIZE;
-                int idx2 = (step - i - 1 - period) % WINDOW_SIZE;
-                if (past_states[machine_idx][idx1] != past_states[machine_idx][idx2]) {
-                    is_loop = 0;
-                    break;
-                }
+    for (int period = 1; period <= WINDOW_SIZE / 2; period++) {
+        int is_loop = 1;
+        for (int i = 0; i < period; i++) {
+            int idx1 = (step - i - 1) % WINDOW_SIZE;
+            int idx2 = (step - i - 1 - period) % WINDOW_SIZE;
+            if (past_states[machine_idx][idx1] != past_states[machine_idx][idx2]) {
+                is_loop = 0;
+                break;
             }
-            if (is_loop) return 1;
         }
+        if (is_loop) return 1;
     }
     return 0;
 }
 
-// Simulate all machines in dovetailed fashion with pause after each step
+// Check if all machines are halted
+int all_machines_halted() {
+    for (int m = 0; m < NUM_MACHINES; m++) {
+        if (!tms[m].halted) return 0;
+    }
+    return 1;
+}
+
+// Print aligned header for machine states
+void print_header() {
+    printf("%-10s %-8s %-8s %-7s %-12s %-60s\n",
+           "Machine", "State", "Pos", "Done", "HaltStep", "Tape3");
+}
+
+// Print aligned row for a machine
+void print_machine_row(int i) {
+    int last_j = (tms[i].halt_step > 0) ? ((int)tms[i].halt_step - 1) % WINDOW_SIZE : -1;
+    char tape_str[70]; // Buffer for Tape3 string
+    int pos = 0;
+    tape_str[pos++] = '[';
+    for (int j = 0; j < WINDOW_SIZE; j++) {
+        if (last_j >= 0 && j == last_j) {
+            pos += sprintf(tape_str + pos, "[%d]", output_tape[i][j]);
+        } else {
+            pos += sprintf(tape_str + pos, "%d", output_tape[i][j]);
+        }
+        if (j < WINDOW_SIZE - 1) {
+            pos += sprintf(tape_str + pos, ",");
+        }
+    }
+    tape_str[pos++] = ']';
+    tape_str[pos] = '\0';
+
+    printf("%-10d %-8d %-8u %-7d %-12u %s\n",
+           i, tms[i].current_state, tms[i].tape_position, tms[i].halted, tms[i].halt_step, tape_str);
+}
+
+// Simulate all machines in dovetailed fashion with pause after each stage
 void simulate() {
-    for (uint32_t step = 1; step <= MAX_STEPS; step++) {
-        int all_halted = 1;
-        printf("Step %u:\n", step);
-        // Perform one step for each non-halted machine and print steps
-        for (int m = 0; m < NUM_MACHINES; m++) {
+    for (uint32_t stage = 1; stage <= MAX_STEPS; stage++) {
+        printf("Stage %u:\n", stage);
+        // Perform one step for machines 0 to min(stage-1, NUM_MACHINES-1)
+        for (int m = 0; m < NUM_MACHINES && m < stage; m++) {
             if (tms[m].halted) continue;
-            all_halted = 0;
+            uint32_t personal_step = tms[m].halt_step + 1;
             uint8_t symbol = tms[m].tape[tms[m].tape_position % TAPE_LENGTH];
             uint8_t write = rule_table[m][tms[m].current_state][symbol].write_symbol;
             uint8_t next = rule_table[m][tms[m].current_state][symbol].next_state;
-            printf("Machine %d: Step %u, Read %d, Write %d, Next State %d\n",
-                   m, step, symbol, write, next);
-            if (tms[m].halt_step < WINDOW_SIZE) {
-                output_tape[m][tms[m].halt_step] = write;
-            }
+            printf("Machine %d: Personal step %u (global stage %u), Read %d, Write %d, Next State %d\n",
+                   m, personal_step, stage, symbol, write, next);
+            // Update circular window with this write
+            output_tape[m][tms[m].halt_step % WINDOW_SIZE] = write;
             tms[m].tape[tms[m].tape_position % TAPE_LENGTH] = write;
             tms[m].current_state = next;
             tms[m].tape_position++;
-            tms[m].halt_step = step;
-            if (next == 2 || (step >= 100 && detect_loop(m, step))) {
+            tms[m].halt_step = personal_step;
+            if (next == 2 || (personal_step >= 100 && detect_loop(m, personal_step))) {
                 tms[m].halted = 1;
                 if (next == 2) {
                     halt_set[m / 8] |= (1 << (m % 8));
                 }
             }
         }
-        // Print Tape 2 and Tape 3 combined for each machine with tab alignment and active symbol highlighted
+        // Print Tape 2 and Tape 3 combined for each machine with alignment
         printf("Machine States and Simulation Window:\n");
+        print_header();
         for (int i = 0; i < NUM_MACHINES; i++) {
-            printf("Machine %d:\tState=%d,\tPos=%u,\tDone=%d,\tHaltStep=%u,\tTape3=[",
-                   i, tms[i].current_state, tms[i].tape_position, tms[i].halted, tms[i].halt_step);
-            for (int j = 0; j < WINDOW_SIZE; j++) {
-                if (!tms[i].halted && tms[i].halt_step == step && j == step - 1 && j < WINDOW_SIZE) {
-                    printf("[%d]", output_tape[i][j]); // Highlight active symbol
-                } else {
-                    printf("%d", output_tape[i][j]);
-                }
-                if (j < WINDOW_SIZE - 1) printf(",");
-            }
-            printf("]\n");
+            print_machine_row(i);
         }
+        // Check if all halted
+        if (all_machines_halted()) break;
         // Pause and wait for key press (Enter)
-        if (!all_halted) {
-            printf("Press Enter to continue...\n");
-            getchar(); // Wait for Enter key
-        }
-        if (all_halted) break; // Stop if all machines are done
+        printf("Press Enter to continue...\n");
+        getchar(); // Wait for Enter key
     }
 }
 
-// Print Tape 2 and Tape 3 combined with tab alignment
+// Print Tape 2 and Tape 3 combined with alignment
 void print_tapes() {
     printf("Final Machine States and Simulation Window:\n");
+    print_header();
     for (int i = 0; i < NUM_MACHINES; i++) {
-        printf("Machine %d:\tState=%d,\tPos=%u,\tDone=%d,\tHaltStep=%u,\tTape3=[",
-               i, tms[i].current_state, tms[i].tape_position, tms[i].halted, tms[i].halt_step);
-        for (int j = 0; j < WINDOW_SIZE; j++) {
-            printf("%d", output_tape[i][j]);
-            if (j < WINDOW_SIZE - 1) printf(",");
-        }
-        printf("]\n");
+        print_machine_row(i);
     }
 }
 
@@ -223,7 +242,6 @@ void print_halt_set() {
         if (i % 8 == 7) printf(" ");
     }
     printf("\nHalted: %d/%d\n", halts, NUM_MACHINES);
-
 }
 
 int main() {
