@@ -39,7 +39,7 @@ void init_tape(Machine *m) {
     m->tape[508] = 0;
     m->tape[509] = 2;
     // Debug: Verify tape initialization
-    printf("Initial Tape (500–515): ");
+    printf("Initial Tape (500-515): ");
     for (int i = 500; i <= 515; i++) {
         printf("%d ", m->tape[i]);
     }
@@ -241,7 +241,7 @@ void init_rules(Transition ***rules, int num_states) {
                 (*rules)[state][symbol].next_state = 13;
             } else if (state == 13 && symbol == 2) {
                 (*rules)[state][symbol].write_symbol = 2;
-                (*rules)[state][symbol].move = 1;
+                (*rules)[state][symbol].move = 0;  // Stay on 2
                 (*rules)[state][symbol].next_state = 14;
             }
             // State 14: Check for halt
@@ -260,7 +260,7 @@ void init_rules(Transition ***rules, int num_states) {
             }
             printf("State %d, Symbol %d: Write %d, Move %s, Next State %d\n",
                    state, symbol, (*rules)[state][symbol].write_symbol,
-                   (*rules)[state][symbol].move == 1 ? "Right" : (*rules)[state][symbol].move == -1 ? "Left" : "Stay",
+                   (*rules)[state][symbol].move == 1 ? "Right" : ((*rules)[state][symbol].move == -1 ? "Left" : "Stay"),
                    (*rules)[state][symbol].next_state);
         }
     }
@@ -322,16 +322,21 @@ void simulate(Machine *m, Transition **rules, int num_states) {
             m->halted = 1;
             break;
         }
-        m->state = rule.next_state;
-        
-        // Increment iteration count after completing each segment
-        if ((m->state == 3 && symbol == 1) || (m->state == 6 && symbol == 1) || (m->state == 9 && symbol == 0)) {
+        // Increment iteration count after completing each segment (before state update)
+        if ((m->state == 2 && symbol == 0) || (m->state == 5 && symbol == 0) || (m->state == 8 && symbol == 0)) {
             m->iteration_count++;
             printf("Incrementing iteration_count to %d at state %d, symbol %d\n", m->iteration_count, m->state, symbol);
         }
+        m->state = rule.next_state;
         // Halt when entering state 15
         if (m->state == num_states) {
             m->halted = 1;
+        }
+        // Safeguard for left loop in verification states
+        if ((m->state == 9 || m->state == 10 || m->state == 11) && m->position < 490) {
+            printf("Error: Stuck left in verification, halting at step %d.\n", m->step_count);
+            m->halted = 1;
+            break;
         }
         // Prevent indefinite looping in state 13
         if (m->state == 13 && m->position > 509 + 10) {
