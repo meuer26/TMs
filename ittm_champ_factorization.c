@@ -33,6 +33,7 @@ uint8_t sim_tape[MACHINES][WINDOW];  // Tape 3: simulation window for each machi
 uint8_t state_window[MACHINES][WINDOW]; // Additional window for state history
 uint8_t halt_map[MACHINES / 8 + 1];  // Tape 4: 32-bit bitmap for halting set
 uint8_t rules[MACHINES][STATES][SYMBOLS]; // Rules: transitions for each machine
+char descriptions[MACHINES][30];     // Descriptions for each machine's rule behavior
 
 // First 25 primes <100 for factorization
 const uint32_t primes[MAX_PRIMES] = {
@@ -144,18 +145,30 @@ void assign_rules(int num_machines) {
                 }
             }
         }
+        // Assign description based on rule_idx
+        char *desc;
+        if (rule_idx == 0 || rule_idx == 1) {
+            desc = "Cycles forever";
+        } else if (rule_idx == 2) {
+            desc = "Halts on first 0 (~2 steps)";
+        } else {
+            desc = "Halts on first 00 (~4 steps)";
+        }
+        strcpy(descriptions[i], desc);
     }
     // Compute max widths for alignment
     int max_num_width = 0;
     int max_fact_len = 0;
+    int max_desc_len = 0;
     for (int i = 0; i < num_machines; i++) {
         char num_buf[10];
         sprintf(num_buf, "%d", nums[i]);
         max_num_width = (max_num_width > (int)strlen(num_buf)) ? max_num_width : (int)strlen(num_buf);
         max_fact_len = (max_fact_len > (int)strlen(factor_strs[i])) ? max_fact_len : (int)strlen(factor_strs[i]);
+        max_desc_len = (max_desc_len > (int)strlen(descriptions[i])) ? max_desc_len : (int)strlen(descriptions[i]);
     }
-    // Print header with dynamic widths + fixed for rules
-    printf("%-8s %-*s %-*s %-*s\n", "Machine", max_num_width, "Number", max_fact_len, "Factorization", RULES_WIDTH, "Rules");
+    // Print header with dynamic widths + fixed for rules + description
+    printf("%-8s %-*s %-*s %-*s %-*s\n", "Machine", max_num_width, "Number", max_fact_len, "Factorization", RULES_WIDTH, "Rules", max_desc_len, "     Description");
     // Print aligned data
     for (int i = 0; i < num_machines; i++) {
         char rules_str[30];
@@ -163,18 +176,14 @@ void assign_rules(int num_machines) {
                 rules[i][0][0], rules[i][0][1],
                 rules[i][1][0], rules[i][1][1],
                 rules[i][2][0], rules[i][2][1]);
-        printf("%-8d %-*d %-*s %-*s\n",
-               i, max_num_width + 2, nums[i], max_fact_len + 2, factor_strs[i], RULES_WIDTH, rules_str);
+        printf("%-8d %-*d %-*s %-*s %-*s\n",
+               i, max_num_width + 2, nums[i], max_fact_len + 2, factor_strs[i], RULES_WIDTH + 5, rules_str, max_desc_len + 5, descriptions[i]);
     }
     // Zero out Tape 4 for halting set
     for (int i = 0; i < MACHINES / 8 + 1; i++) {
         halt_map[i] = 0; // Clear halt bitmap
     }
-    // Print rules for machine 0 for teaching clarity
-    printf("Rules for machine 0: [0->%d,%d] [1->%d,%d] [2->%d,%d]\n",
-           rules[0][0][0], rules[0][0][1], rules[0][1][0], rules[0][1][1],
-           rules[0][2][0], rules[0][2][1]);
-    // Confirm rule generation completed
+
     printf("Rule generation completed for all machines.\n");
 }
 
