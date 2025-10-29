@@ -4,17 +4,18 @@
 #include <stdlib.h>   // For atoi, exit: string to number, program exit
 #include <stdint.h>   // For uint8_t, uint32_t: fixed-width integers
 #include <string.h>   // For sprintf, memset: string and memory operations
+#include <time.h>     // For time() to seed random
 
 // Configuration: ITTM oracle for teaching, using prime factorization of Champernowne numbers
 #define MACHINES 32    // Number of tiny Turing machines to simulate
 #define STATES 3       // States per machine: 0–1 for computation, 2 for halt
 #define SYMBOLS 2      // Alphabet: 0, 1 (binary input for simulation)
 #define MAX_STEPS 5000  // Steps: small approximation of infinite time (ω) for interactive sim
-#define MAX_PERSONAL_STEPS 2000
+#define MAX_PERSONAL_STEPS 500  // Threshold for loop detection
 #define WINDOW 20      // Window size for loop detection (20 bits)
 #define INPUT_LEN 5733 // Champernowne prefix: 1 to 1000 (~5733 chars)
 #define MAX_PRIMES 25  // Primes <100 (2, 3, ..., 97)
-#define RULES_WIDTH 23 // Fixed width for rules string alignment
+#define RULES_WIDTH 26 // Fixed width for rules string alignment (adjusted for [0->1,1] [1->0,0] [2->0,0])
 
 // Machine structure: tracks state and position for each tiny TM
 typedef struct {
@@ -28,7 +29,8 @@ typedef struct {
 // Global state: four tapes of the ITTM oracle
 Machine machines[MACHINES];           // Tape 2: array of machine states
 char input_tape[INPUT_LEN + 1];      // Tape 1: Champernowne prefix (string)
-uint8_t sim_tape[MACHINES][WINDOW];  // Tape 3: simulation window for each machine
+uint8_t sim_tape[MACHINES][WINDOW];  // Tape 3: simulation window for each machine (reads)
+uint8_t state_window[MACHINES][WINDOW]; // Additional window for state history
 uint8_t halt_map[MACHINES / 8 + 1];  // Tape 4: 32-bit bitmap for halting set
 uint8_t rules[MACHINES][STATES][SYMBOLS]; // Rules: transitions for each machine
 
@@ -74,21 +76,23 @@ void assign_rules(int num_machines) {
         }
         pos++; // Move to next tape position
     }
-    // Define rule templates: halt-prone, cycle-prone, mixed
-    uint8_t halt_prone[STATES][SYMBOLS] = {{1, 1}, {2, 2}, {0, 0}}; // [0->1,1] [1->2,2] [2->0,0]
-    uint8_t cycle_prone[STATES][SYMBOLS] = {{1, 1}, {0, 0}, {0, 0}}; // [0->1,1] [1->0,0] [2->0,0]
-    uint8_t mixed[STATES][SYMBOLS] = {{1, 1}, {2, 0}, {0, 0}};      // [0->1,1] [1->2,0] [2->0,0]
+    // Define rule templates
+    uint8_t cycle_prone[STATES][SYMBOLS] = {{1, 1}, {0, 0}, {0, 0}}; // Cycle 0<->1 forever
+    uint8_t single_halt[STATES][SYMBOLS] = {{2, 0}, {0, 0}, {0, 0}}; // Halt on first 0 (mean ~2 steps)
+    uint8_t double_halt[STATES][SYMBOLS] = {{1, 0}, {2, 0}, {0, 0}}; // Halt on first 00 (mean ~4 steps)
     // Precompute factorizations and rules
     char factor_strs[MACHINES][50];
     int nums[MACHINES];
     for (int i = 0; i < num_machines; i++) {
         machines[i].state = 0; // Initialize state to 0 (running)
-        machines[i].pos = 0;   // Start at tape position 0
+        // Randomize starting position: 0 to INPUT_LEN-1
+        machines[i].pos = rand() % INPUT_LEN;
         machines[i].done = 0;  // Not halted or looped
         machines[i].halt_step = 0; // No termination yet
         machines[i].personal_step = 0;
-        // Zero out Tape 3 for loop detection
-        for (int j = 0; j < WINDOW; j++) sim_tape[i][j] = 0;
+        // Zero out Tape 3 and state window for loop detection
+        memset(sim_tape[i], 0, WINDOW);
+        memset(state_window[i], 0, WINDOW);
         // Get number for machine (default to i+1 if not enough)
         int num = (count > i) ? numbers[i] : i + 1;
         nums[i] = num;
@@ -128,15 +132,15 @@ void assign_rules(int num_machines) {
         }
         factor_str[factor_pos] = '\0'; // Null-terminate factor string
         // Assign rule template based on factor count mod 4
-        int rule_idx = factor_count % 4; // 0,1: cycle-prone, 2: mixed, 3: halt-prone
+        int rule_idx = factor_count % 4; // 0,1: cycle-prone, 2: single_halt, 3: double_halt
         for (int s = 0; s < STATES; s++) {
             for (int sym = 0; sym < SYMBOLS; sym++) {
                 if (rule_idx == 0 || rule_idx == 1) {
                     rules[i][s][sym] = cycle_prone[s][sym];
                 } else if (rule_idx == 2) {
-                    rules[i][s][sym] = mixed[s][sym];
+                    rules[i][s][sym] = single_halt[s][sym];
                 } else {
-                    rules[i][s][sym] = halt_prone[s][sym];
+                    rules[i][s][sym] = double_halt[s][sym];
                 }
             }
         }
@@ -150,8 +154,8 @@ void assign_rules(int num_machines) {
         max_num_width = (max_num_width > (int)strlen(num_buf)) ? max_num_width : (int)strlen(num_buf);
         max_fact_len = (max_fact_len > (int)strlen(factor_strs[i])) ? max_fact_len : (int)strlen(factor_strs[i]);
     }
-    // Print header with dynamic widths
-    printf("%-8s %-*s %-*s %-*s\n", "Machine", max_num_width + 5, "Number", max_fact_len, "Factorization", RULES_WIDTH, "Rules");
+    // Print header with dynamic widths + fixed for rules
+    printf("%-8s %-*s %-*s %-*s\n", "Machine", max_num_width, "Number", max_fact_len, "Factorization", RULES_WIDTH, "Rules");
     // Print aligned data
     for (int i = 0; i < num_machines; i++) {
         char rules_str[30];
@@ -160,7 +164,7 @@ void assign_rules(int num_machines) {
                 rules[i][1][0], rules[i][1][1],
                 rules[i][2][0], rules[i][2][1]);
         printf("%-8d %-*d %-*s %-*s\n",
-               i, max_num_width + 5, nums[i], max_fact_len + 2, factor_strs[i], RULES_WIDTH, rules_str);
+               i, max_num_width + 2, nums[i], max_fact_len + 2, factor_strs[i], RULES_WIDTH, rules_str);
     }
     // Zero out Tape 4 for halting set
     for (int i = 0; i < MACHINES / 8 + 1; i++) {
@@ -174,22 +178,38 @@ void assign_rules(int num_machines) {
     printf("Rule generation completed for all machines.\n");
 }
 
-// Check for loops in Tape 3 (e.g., repeating "0", "00", or "11")
+// Check for loops in Tape 3 and state window
 // Mimics ITTM loop detection at ω steps
 int check_loop(int m, uint32_t personal_step) {
-    if (personal_step < MAX_PERSONAL_STEPS) return 0; // Wait for MAX_PERSONAL_STEPS to check loops
-    // Check for period=1 to WINDOW loops (e.g., "0", "00", "11")
-    for (int period = 1; period <= WINDOW; period++) {
-        int match = 1; // Assume loop
-        for (int i = 0; i < period; i++) { // Compare symbols
-            int idx1 = (personal_step - i - 1) % WINDOW; // Recent symbol
-            int idx2 = (personal_step - i - 1 - period) % WINDOW; // Earlier symbol
-            if (sim_tape[m][idx1] != sim_tape[m][idx2]) { // No match
-                match = 0; // Not a loop
-                break;
+    if (personal_step < MAX_PERSONAL_STEPS) return 0; // Wait for threshold to check loops
+    // Check for period=1 to WINDOW/2 loops
+    for (int period = 1; period <= WINDOW / 2; period++) {
+        // Check sim_tape (input symbols)
+        {
+            int match = 1;
+            for (int i = 0; i < period; i++) {
+                int idx1 = (personal_step - i - 1) % WINDOW;
+                int idx2 = (personal_step - i - 1 - period) % WINDOW;
+                if (sim_tape[m][idx1] != sim_tape[m][idx2]) {
+                    match = 0;
+                    break;
+                }
             }
+            if (match) return 1;
         }
-        if (match) return 1; // Loop detected
+        // Check state_window
+        {
+            int match = 1;
+            for (int i = 0; i < period; i++) {
+                int idx1 = (personal_step - i - 1) % WINDOW;
+                int idx2 = (personal_step - i - 1 - period) % WINDOW;
+                if (state_window[m][idx1] != state_window[m][idx2]) {
+                    match = 0;
+                    break;
+                }
+            }
+            if (match) return 1;
+        }
     }
     return 0; // No loop detected
 }
@@ -210,21 +230,21 @@ void print_header() {
 
 // Print aligned row for a machine
 void print_machine_row(int i) {
-    int last_j = (machines[i].halt_step > 0) ? ((int)machines[i].halt_step - 1) % WINDOW : -1;
-    char tape_str[100]; // Buffer for Tape3 string
-    int pos = sprintf(tape_str, "[");
+    int last_j = ((int)machines[i].personal_step - 1) % WINDOW;
+    char tape_str[200]; // Buffer for Tape3 string (larger for 20 items)
+    int posi = sprintf(tape_str, "[");
     for (int j = 0; j < WINDOW; j++) {
         if (j > 0) {
-            pos += sprintf(tape_str + pos, ",");
+            posi += sprintf(tape_str + posi, ",");
         }
-        if (last_j >= 0 && j == last_j) {
-            pos += sprintf(tape_str + pos, "[%d]", sim_tape[i][j]); // Highlight last
+        if (j == last_j) {
+            posi += sprintf(tape_str + posi, "[%d]", sim_tape[i][j]); // Highlight last
         } else {
-            pos += sprintf(tape_str + pos, "%d", sim_tape[i][j]);
+            posi += sprintf(tape_str + posi, "%d", sim_tape[i][j]);
         }
     }
-    pos += sprintf(tape_str + pos, "]");
-    tape_str[pos] = '\0';
+    posi += sprintf(tape_str + posi, "]");
+    tape_str[posi] = '\0';
 
     printf("%-8d %-6d %-6u %-5d %-10u %s\n",
            i, machines[i].state, machines[i].pos, machines[i].done, machines[i].halt_step, tape_str);
@@ -246,8 +266,10 @@ void simulate(int num_machines) {
             uint8_t next = rules[m][machines[m].state][sym];
             printf("Machine %d: Personal step %u (global stage %u), Read %d, Next State %d\n",
                    m, personal_step, stage, sym, next);
-            // Write to Tape 3 (simulation window) - record the read symbol
-            sim_tape[m][machines[m].personal_step % WINDOW] = sym;
+            // Record old state and read sym in windows
+            uint32_t idx = (personal_step - 1) % WINDOW;
+            state_window[m][idx] = machines[m].state;
+            sim_tape[m][idx] = sym;
             machines[m].state = next; // Update state
             machines[m].pos++; // Move tape position
             machines[m].personal_step = personal_step;
@@ -303,6 +325,7 @@ void print_halt_set(int num_machines) {
 }
 
 int main() {
+    srand(time(NULL)); // Seed random number generator
     int num_machines;
     printf("Enter number of machines (1-32): ");
     scanf("%d", &num_machines);
