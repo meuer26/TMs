@@ -1,20 +1,25 @@
 // ITTM with Champernowne prime factorization
 
-#include <stdio.h>    // For printf, fprintf: output functions
-#include <stdlib.h>   // For atoi, exit: string to number, program exit
-#include <stdint.h>   // For uint8_t, uint32_t: fixed-width integers
-#include <string.h>   // For sprintf, memset: string and memory operations
-#include <time.h>     // For time() to seed random
+// Tape 1: Champernowne prefix
+// Tape 2: Array of machine states (State, Pos, etc)
+// Tape 3: Simulation window for each machine
+// Tape 4: Bitmap for Halting set
 
-// Configuration: ITTM oracle for teaching, using prime factorization of Champernowne numbers
-#define MACHINES 32    // Number of tiny Turing machines to simulate
+#include <stdio.h>    
+#include <stdlib.h>   
+#include <stdint.h>   
+#include <string.h>   
+#include <time.h>     
+
+// Configuration: ITTM oracle, using prime factorization of Champernowne
+#define MACHINES 32    // Number of small Turing machines to simulate
 #define STATES 3       // States per machine: 0–1 for computation, 2 for halt
 #define SYMBOLS 2      // Alphabet: 0, 1 (binary input for simulation)
 #define MAX_STEPS 5000  // Steps: small approximation of infinite time (ω) for interactive sim
 #define MAX_PERSONAL_STEPS 500  // Threshold for loop detection
-#define WINDOW 20      // Window size for loop detection (20 bits)
+#define WINDOW 20      // Window size for loop detection
 #define INPUT_LEN 5733 // Champernowne prefix: 1 to 1000 (~5733 chars)
-#define MAX_PRIMES 25  // Primes <100 (2, 3, ..., 97)
+#define MAX_PRIMES 25  // Primes
 #define RULES_WIDTH 26 // Fixed width for rules string alignment (adjusted for [0->1,1] [1->0,0] [2->0,0])
 
 // Machine structure: tracks state and position for each tiny TM
@@ -22,8 +27,8 @@ typedef struct {
     uint8_t state;      // Current state (0–2: 0–1 flip, 2 halt)
     uint32_t pos;       // Position on input tape (Tape 1)
     uint8_t done;       // 1 if halted (state=2) or looped
-    uint32_t halt_step; // Step when halted or looped (for debugging); also tracks personal steps
-    uint32_t personal_step; // Personal step count
+    uint32_t halt_step; // Step when halted or looped
+    uint32_t personal_step; // Personal step count per TM
 } Machine;
 
 // Global state: four tapes of the ITTM oracle
@@ -31,28 +36,29 @@ Machine machines[MACHINES];           // Tape 2: array of machine states
 char input_tape[INPUT_LEN + 1];      // Tape 1: Champernowne prefix (string)
 uint8_t sim_tape[MACHINES][WINDOW];  // Tape 3: simulation window for each machine (reads)
 uint8_t state_window[MACHINES][WINDOW]; // Additional window for state history
-uint8_t halt_map[MACHINES / 8 + 1];  // Tape 4: 32-bit bitmap for halting set
+uint8_t halt_map[MACHINES / 8 + 1];  // Tape 4: bitmap for Halting set
 uint8_t rules[MACHINES][STATES][SYMBOLS]; // Rules: transitions for each machine
 char descriptions[MACHINES][30];     // Descriptions for each machine's rule behavior
 
-// First 25 primes <100 for factorization
+// First 25 primes < number 100 for factorization
 const uint32_t primes[MAX_PRIMES] = {
     2, 3, 5, 7, 11, 13, 17, 19, 23, 29, 31, 37, 41, 43, 47, 53, 59, 61, 67, 71,
     73, 79, 83, 89, 97
 };
 
-// Generate Champernowne prefix for Tape 1 (numbers 1 to 1000)
+// Generate Champernowne for Tape 1 (numbers 1 to 1000)
 void load_champernowne() {
-    int pos = 0; // Initialize position in input_tape
+    int pos = 0;
     // Loop through numbers 1 to 1000 to build Champernowne prefix
     for (int n = 1; n <= 1000 && pos < INPUT_LEN; n++) {
         char temp[5]; // Buffer for number (up to 4 digits + null)
         sprintf(temp, "%d", n); // Convert number n to string (e.g., 123 -> "123")
-        for (int i = 0; temp[i] && pos < INPUT_LEN; i++) { // Copy each digit
-            input_tape[pos++] = temp[i]; // Add digit to Tape 1
+        for (int i = 0; temp[i] && pos < INPUT_LEN; i++) {
+            input_tape[pos++] = temp[i]; 
         }
     }
-    input_tape[pos] = '\0'; // Null-terminate the string
+    input_tape[pos] = '\0'; 
+    
     // Print first 50 chars of Tape 1 to show the prefix
     printf("Tape 1: Champernowne prefix = %.50s...\n", input_tape);
 }
@@ -64,7 +70,7 @@ void assign_rules(int num_machines) {
     int count = 0, pos = 0; // Track number count and tape position
     char num_str[5] = {0}; // Buffer for building number strings (up to 4 digits)
     int num_pos = 0; // Position in num_str
-    // Greedily parse digits into numbers (e.g., "123" -> 1, 2, 3)
+    // Parse digits into numbers (e.g., "123" -> 1, 2, 3)
     while (pos < INPUT_LEN && count < num_machines) {
         if (input_tape[pos] >= '0' && input_tape[pos] <= '9') { // If digit
             num_str[num_pos++] = input_tape[pos]; // Add to number string
