@@ -1,3 +1,5 @@
+// This code was written with Grok, an AI by xAI, based on my guidance and specifications.
+
 // ITTM with Champernowne prime factorization
 
 // Tape 1: Champernowne prefix

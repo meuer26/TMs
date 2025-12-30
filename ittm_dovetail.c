@@ -1,3 +1,5 @@
+// This code was written with Grok, an AI by xAI, based on my guidance and specifications.
+
 // ITTM with variable 3 state TMs and dovetailing
 
 #include <stdio.h>

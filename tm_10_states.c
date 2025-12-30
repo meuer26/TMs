@@ -1,3 +1,5 @@
+// This code was written with Grok, an AI by xAI, based on my guidance and specifications.
+
 // A non-universal 10 state, 2 symbol TM
 
 #include <stdio.h>

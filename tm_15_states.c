@@ -1,3 +1,5 @@
+// This code was written with Grok, an AI by xAI, based on my guidance and specifications.
+
 // A universal 15 state TM.
 
 #include <stdio.h>

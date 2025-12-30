@@ -1,3 +1,5 @@
+// This code was written with Grok, an AI by xAI, based on my guidance and specifications.
+
 // Not a universal TM, it is only 2 states. 
 
 
