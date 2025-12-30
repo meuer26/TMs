@@ -1,4 +1,7 @@
-// This code was written with Grok, an AI by xAI, based on my guidance and specifications.
+// Copyright (c) 2025 Dan O’Malley
+// This file is licensed under the MIT License. See LICENSE for details.
+// Generated with Grok by xAI.
+
 
 // A universal 15 state TM.
 
